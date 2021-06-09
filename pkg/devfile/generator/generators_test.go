@@ -1,11 +1,12 @@
 package generator
 
 import (
-	"github.com/devfile/library/pkg/devfile/parser/data"
-	"github.com/devfile/library/pkg/util"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/devfile/library/pkg/devfile/parser/data"
+	"github.com/devfile/library/pkg/util"
 
 	v1 "github.com/devfile/api/v2/pkg/apis/workspaces/v1alpha2"
 	"github.com/devfile/api/v2/pkg/attributes"
@@ -672,4 +673,112 @@ func TestGetInitContainers(t *testing.T) {
 		})
 	}
 
+}
+
+func TestGetDeployment(t *testing.T) {
+	hostPathType := corev1.HostPathDirectory
+	tests := []struct {
+		name              string
+		kind              string
+		apiVersion        string
+		objName           string
+		namespace         string
+		labels            map[string]string
+		annotations       map[string]string
+		initContainers    []corev1.Container
+		containers        []corev1.Container
+		volumes           []corev1.Volume
+		podSelectorLabels map[string]string
+	}{
+		{
+			name:       "Get Deployment",
+			kind:       "Pod",
+			apiVersion: "v2",
+			objName:    "Dev Deployment",
+			namespace:  "default",
+			labels: map[string]string{
+				"environment": "dev",
+			},
+			annotations: map[string]string{
+				"imageRegistry": "https://hub.docker.com/",
+			},
+			initContainers: []corev1.Container{
+				{
+					Name:  "init-container",
+					Image: "ubi8",
+				},
+			},
+			containers: []corev1.Container{
+				{
+					Name:  "sample",
+					Image: "ubuntu",
+				},
+			},
+			volumes: []corev1.Volume{
+				{
+					Name: "data",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/data",
+							Type: &hostPathType,
+						},
+					},
+				},
+			},
+			podSelectorLabels: map[string]string{
+				"pod1": "label1",
+				"pod2": "label2",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			typeMeta := GetTypeMeta(tt.kind, tt.apiVersion)
+			objMeta := GetObjectMeta(tt.objName, tt.namespace, tt.labels, tt.annotations)
+
+			deploymentParams := DeploymentParams{
+				TypeMeta:          typeMeta,
+				ObjectMeta:        objMeta,
+				InitContainers:    tt.initContainers,
+				Containers:        tt.containers,
+				Volumes:           tt.volumes,
+				PodSelectorLabels: tt.podSelectorLabels,
+			}
+
+			deployment := GetDeployment(deploymentParams)
+			if !reflect.DeepEqual(deployment.TypeMeta, typeMeta) {
+				t.Errorf("TestGetDeployment() error in TypeMeta:\n want %+v\n actual %+v\n", typeMeta, deployment.TypeMeta)
+			}
+
+			if !reflect.DeepEqual(deployment.ObjectMeta, objMeta) {
+				t.Errorf("TestGetDeployment() error in ObjectMeta:\n want %+v\n actual %+v\n", objMeta, deployment.ObjectMeta)
+			}
+
+			if !reflect.DeepEqual(deployment.Spec.Selector.MatchLabels, tt.podSelectorLabels) {
+				t.Errorf("TestGetDeployment() error in Deployment.Spec.Selector.MatchLabels:\n want %+v\n actual %+v\n", tt.podSelectorLabels, deployment.Spec.Selector.MatchLabels)
+			}
+
+			if !reflect.DeepEqual(deployment.Spec.Template.Name, tt.objName) {
+				t.Errorf("TestGetDeployment() error in Deployment.Spec.Template.Name:\n want %+v\n actual %+v\n", tt.objName, deployment.Spec.Template.Name)
+			}
+
+			if !reflect.DeepEqual(deployment.Spec.Template.Namespace, tt.namespace) {
+				t.Errorf("TestGetDeployment() error in Deployment.Spec.Template.Namespace:\n want %+v\n actual %+v\n", tt.namespace, deployment.Spec.Template.Namespace)
+			}
+
+			if !reflect.DeepEqual(deployment.Spec.Template.Spec.Volumes, tt.volumes) {
+				t.Errorf("TestGetDeployment() error in Deployment.Spec.Template.Spec.Volumes:\n want %+v\n actual %+v\n", tt.volumes, deployment.Spec.Template.Spec.Volumes)
+			}
+
+			if !reflect.DeepEqual(deployment.Spec.Template.Spec.InitContainers, tt.initContainers) {
+				t.Errorf("TestGetDeployment() error in Deployment.Spec.Template.Spec.InitContainers:\n want %+v\n actual %+v\n", tt.initContainers, deployment.Spec.Template.Spec.InitContainers)
+			}
+
+			if !reflect.DeepEqual(deployment.Spec.Template.Spec.Containers, tt.containers) {
+				t.Errorf("TestGetDeployment() error in Deployment.Spec.Template.Spec.Containers:\n want %+v\n actual %+v\n", tt.containers, deployment.Spec.Template.Spec.Containers)
+			}
+
+		})
+	}
 }
